@@ -1,5 +1,8 @@
 # 🛡️ Sentinel — AI SOC Triage Agent on Cloudflare
 
+**🔴 Live demo:** https://sentinel-soc-agent.grishi05.workers.dev
+&nbsp;·&nbsp; Built on Cloudflare **Workers AI (Llama 3.3)** + **Durable Objects**.
+
 Sentinel is an AI-powered **Security Operations Center (SOC) Tier‑1 triage analyst**. Paste a
 suspicious email, an alert, a log line, or a single indicator, and Sentinel will:
 
