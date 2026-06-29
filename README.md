@@ -23,8 +23,8 @@ single prompt.
 
 | Required component | How Sentinel implements it |
 | --- | --- |
-| **LLM** | **Llama 3.3 70B** on **Workers AI** (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) via the `env.AI` binding, using native **function calling**. |
-| **Workflow / coordination** | A **Worker** routes requests to a **Durable Object** agent that runs a multi‑step **tool‑calling loop** (LLM → tool → LLM → … → save case). See [`src/agent.ts`](src/agent.ts). |
+| **LLM** | **Llama 3.3 70B** on **Workers AI** (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) via the `env.AI` binding, used (with JSON‑mode output) for the holistic judgement of an artifact's content. |
+| **Workflow / coordination** | A **Worker** routes requests to a **Durable Object** agent that orchestrates a multi‑step pipeline: deterministic IOC tools (extract → assess → score → recommend) **plus** an LLM classification/summary step, then persists the case. See [`src/agent.ts`](src/agent.ts). |
 | **User input (chat)** | A single‑page **chat console** served from the edge via **Workers static assets** (the Pages‑equivalent). See [`public/index.html`](public/index.html). |
 | **Memory / state** | Each session is one **Durable Object** with embedded **SQLite**: a `messages` table (conversation) and a `cases` table (saved triage findings), persisted across requests and restarts. |
 
@@ -41,15 +41,23 @@ Worker  (src/index.ts)                    ← only runs for /api/*; static asset
         ▼
 TriageAgent  (Durable Object, src/agent.ts)
         ├─ SQLite memory:  messages + cases
-        └─ Agent loop:
-              env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages, tools })
-                   │   tool_calls?
-                   ├─ extract_indicators  ─┐
-                   ├─ assess_indicator     │  pure, deterministic, unit-tested
-                   ├─ score_alert          │  (src/tools.ts)
-                   ├─ recommend_actions    │
-                   └─ save_case_note  ─────┘  → writes to SQLite (memory)
+        └─ Triage pipeline:
+              1. extract_indicators   ─┐
+              2. assess_indicator      │  pure, deterministic, unit-tested
+              3. score_alert           │  (src/tools.ts) — owns the structured result
+              4. recommend_actions    ─┘
+              5. classify  →  env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {…})
+                              LLM judges the *content* (urgency, impersonation,
+                              social engineering) → JSON {verdict, severity, summary…}
+              6. save case  →  writes to SQLite (memory)
 ```
+
+**Why split it this way?** Letting the LLM faithfully re‑serialize every finding into a "save" tool
+call proved unreliable (Llama 3.3 would drop fields mid‑loop). So deterministic code owns the
+*structured* output — indicators, scores, the playbook — guaranteeing the verdict panel is always
+accurate, while the LLM does the part that genuinely needs a model: judging an artifact's content.
+This is also what lets Sentinel flag a phishing lure that has **no technical IOCs at all** (e.g. a
+fake "antivirus expired" email), which a purely indicator‑driven score would miss.
 
 Why **Durable Objects** instead of a stateless Worker? Each chat session needs private,
 strongly‑consistent memory. `idFromName(sessionId)` deterministically routes a session to its own
@@ -61,9 +69,9 @@ required.
 | File | Purpose |
 | --- | --- |
 | [`src/index.ts`](src/index.ts) | Worker entry: routes `/api/chat`, `/api/history`, `/api/reset` to the per‑session agent. |
-| [`src/agent.ts`](src/agent.ts) | `TriageAgent` Durable Object: the agent loop + SQLite memory. |
-| [`src/tools.ts`](src/tools.ts) | The analyst toolbox (pure functions) + the tool schemas given to the LLM. |
-| [`src/prompts.ts`](src/prompts.ts) | The Sentinel system prompt. |
+| [`src/agent.ts`](src/agent.ts) | `TriageAgent` Durable Object: the triage pipeline, LLM classification + SQLite memory. |
+| [`src/tools.ts`](src/tools.ts) | The analyst toolbox (pure, deterministic functions) — extract / assess / score / recommend. |
+| [`src/prompts.ts`](src/prompts.ts) | The Sentinel persona + classification prompts. |
 | [`public/index.html`](public/index.html) | The SOC console chat UI (no build step). |
 | [`test/tools.test.ts`](test/tools.test.ts) | Unit tests for the deterministic tool logic. |
 | [`wrangler.jsonc`](wrangler.jsonc) | Bindings: AI, Durable Object, SQLite migration, static assets. |

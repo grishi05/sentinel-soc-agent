@@ -68,6 +68,24 @@ Issues caught and fixed during verification:
 Final state: `tsc` clean, **12/12** unit tests passing, Worker bundles and both bindings
 (`TRIAGE_AGENT` Durable Object + `AI`) resolve in the dry‑run.
 
-> Note: live Llama 3.3 inference was not exercised locally — it requires the account owner's
-> `wrangler login`. Everything up to the model call (routing, agent loop wiring, tools, SQLite
-> memory, UI, bundling, bindings) was verified.
+### 7. Live deploy + fixing what real traffic exposed
+After `wrangler login` + `wrangler deploy` (one‑time hurdle: a brand‑new account must register a
+`workers.dev` subdomain in the dashboard before the first deploy succeeds), live testing against the
+deployed agent exposed two real quality bugs:
+
+- **Empty verdict panel.** The original design let the LLM drive a tool‑calling loop and re‑pack all
+  findings into a `save_case_note` call. Llama 3.3 dropped those fields mid‑loop, so every saved case
+  came back as `Untitled / Low / no indicators` even when the prose said "Critical".
+- **No‑IOC phishing scored Benign.** A fake "antivirus subscription expired" email — a textbook
+  social‑engineering lure with *no* technical indicators — scored Low, because the verdict was driven
+  by IOC counts. The reply also leaked internal tool names ("the assess_indicator function…").
+
+**Redesign:** moved to a code‑orchestrated pipeline. Deterministic tools own the *structured* result
+(indicators, scores, playbook); the LLM is called once (JSON mode) purely to judge the artifact's
+*content* and write the summary. Code then assembles and saves the case and formats the analyst
+reply. Re‑deployed and re‑tested live: the no‑IOC lure now reads **Malicious / High**, the IOC‑rich
+phishing email populates the panel with its real indicators, and replies are clean and consistently
+formatted.
+
+> Verified end‑to‑end against the live deployment (Worker → Durable Object → Llama 3.3 → SQLite),
+> in addition to `tsc`, 12/12 unit tests, and the dry‑run bundle.
