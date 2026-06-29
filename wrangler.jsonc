@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sentinel-soc-agent",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+
+  // Workers AI binding — gives the Worker access to Llama 3.3 (and other models).
+  "ai": {
+    "binding": "AI"
+  },
+
+  // The agent itself is a Durable Object. Each chat session maps to one instance,
+  // giving us strongly-consistent, per-session memory (conversation + saved cases).
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TRIAGE_AGENT",
+        "class_name": "TriageAgent"
+      }
+    ]
+  },
+
+  // SQLite-backed Durable Objects are required to use the embedded SQL storage API.
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["TriageAgent"]
+    }
+  ],
+
+  // Static chat UI served straight from the edge. The Worker only runs for /api/*;
+  // everything else is served from ./public, with SPA-style fallback to index.html.
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}

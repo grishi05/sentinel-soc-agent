@@ -1,0 +1,33 @@
+{
+  "name": "sentinel-soc-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sentinel — an AI SOC Tier-1 triage agent built on Cloudflare Workers AI (Llama 3.3) + Durable Objects.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "wrangler deploy --dry-run --outdir=dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "cf-typegen": "wrangler types"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers-ai",
+    "durable-objects",
+    "llama-3.3",
+    "ai-agent",
+    "soc",
+    "security",
+    "triage"
+  ],
+  "author": "grishi05",
+  "license": "MIT",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250620.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.9",
+    "wrangler": "^4.105.0"
+  }
+}
