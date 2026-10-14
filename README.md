@@ -10,12 +10,17 @@ suspicious email, an alert, a log line, or a single indicator, and Sentinel will
    *defanged* text like `hxxps://bad[.]example[.]com`.
 2. **Assess** each indicator with SOC heuristics (URL shorteners, raw‑IP hosts, punycode/IDN
    lookalikes, low‑reputation TLDs, brand‑impersonation keywords, RFC1918 vs. public IPs…).
-3. **Score** an overall severity (Low / Medium / High / Critical).
-4. **Recommend** a concrete response playbook (immediate / investigation / remediation).
-5. **Remember** the finding in a per‑session **case file** so analyses accumulate over time.
+3. **Judge** the content with one Llama 3.3 call in JSON mode: urgency, threats, brand or identity
+   impersonation, fake payment and security notices. This catches phishing lures that have no
+   technical indicators at all.
+4. **Score** an overall severity (Low / Medium / High / Critical).
+5. **Recommend** a concrete response playbook (immediate / investigation / remediation).
+6. **Remember** the finding in a per‑session **case file** so analyses accumulate over time.
 
-The LLM (Llama 3.3) drives the workflow by *calling these tools itself* — this is an agent, not a
-single prompt.
+Deterministic, unit-tested code runs this pipeline and owns every structured field (indicators,
+scores, playbook); the model is used only for the step that needs judgment. The first version let
+Llama 3.3 drive a tool-calling loop instead; live testing showed why that was replaced (see
+**Why split it this way?** under Architecture below).
 
 > Built as the Cloudflare **AI‑powered application** fast‑track assignment. It is entirely
 > **defensive**: it helps a human analyst understand and respond to threats. It does not aid offense.

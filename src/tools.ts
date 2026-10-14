@@ -1,14 +1,12 @@
 /**
  * tools.ts — the SOC analyst's toolbox.
  *
- * These are the deterministic building blocks the LLM orchestrates. Keeping the
- * heavy lifting in plain, pure functions (no network, no model) means:
- *   - the agent's reasoning is auditable and reproducible, and
+ * The deterministic steps of the triage pipeline, called in order by the agent
+ * (src/agent.ts): extract → assess → score → recommend. Keeping the heavy
+ * lifting in plain, pure functions (no network, no model) means:
+ *   - the structured result is auditable and reproducible, and
  *   - every function here is unit-testable without Cloudflare or an API key
  *     (see test/tools.test.ts).
- *
- * The schemas in `toolDefinitions` are what we hand to Workers AI so Llama 3.3
- * can decide when to call each tool (Workers AI function calling).
  */
 
 export type IndicatorType = "ip" | "domain" | "url" | "email" | "hash";
@@ -370,96 +368,3 @@ export function recommendActions(severity: Severity, category: Category): Action
   plan.remediation.push("Record indicators in the case file for future correlation");
   return plan;
 }
-
-/* ------------------------------------------------------------------ *
- * Tool schemas handed to Workers AI (Llama 3.3 function calling)
- * ------------------------------------------------------------------ */
-
-export const toolDefinitions = [
-  {
-    name: "extract_indicators",
-    description:
-      "Extract indicators of compromise (IPv4, domains, URLs, emails, file hashes, CVE IDs) from raw alert, log, or email text. Handles defanged input like hxxp and [.]. Always call this first on any submitted artifact.",
-    parameters: {
-      type: "object",
-      properties: {
-        text: { type: "string", description: "The raw text to scan for indicators." },
-      },
-      required: ["text"],
-    },
-  },
-  {
-    name: "assess_indicator",
-    description:
-      "Heuristically risk-score a single indicator (offline — no live threat-intel feed). Call once per notable indicator found.",
-    parameters: {
-      type: "object",
-      properties: {
-        indicator: { type: "string", description: "The indicator value, e.g. a URL or IP." },
-        type: {
-          type: "string",
-          enum: ["ip", "domain", "url", "email", "hash"],
-          description: "The kind of indicator.",
-        },
-      },
-      required: ["indicator", "type"],
-    },
-  },
-  {
-    name: "score_alert",
-    description:
-      "Combine signals into an overall severity (Low/Medium/High/Critical). Call after assessing indicators.",
-    parameters: {
-      type: "object",
-      properties: {
-        highRiskIndicators: { type: "number", description: "Count of high-risk indicators." },
-        mediumRiskIndicators: { type: "number", description: "Count of medium-risk indicators." },
-        affectsCriticalAsset: { type: "boolean", description: "Does this touch a critical asset?" },
-        confirmedMalicious: { type: "boolean", description: "Is anything confirmed malicious?" },
-        userInteraction: { type: "boolean", description: "Did a user already click / enter creds?" },
-        signals: { type: "array", items: { type: "string" }, description: "Other notable signals." },
-      },
-      required: ["highRiskIndicators", "mediumRiskIndicators"],
-    },
-  },
-  {
-    name: "recommend_actions",
-    description:
-      "Return a SOC response playbook (immediate / investigation / remediation steps) for the given severity and category.",
-    parameters: {
-      type: "object",
-      properties: {
-        severity: { type: "string", enum: ["Low", "Medium", "High", "Critical"] },
-        category: {
-          type: "string",
-          enum: ["phishing", "malware", "network", "recon", "credential", "other"],
-        },
-      },
-      required: ["severity", "category"],
-    },
-  },
-  {
-    name: "save_case_note",
-    description:
-      "Persist the finalized triage to the session case file (memory). Call this once at the end of a triage so the finding is recorded and can be recalled later.",
-    parameters: {
-      type: "object",
-      properties: {
-        title: { type: "string", description: "Short title for the case." },
-        summary: { type: "string", description: "1-3 sentence analyst summary." },
-        severity: { type: "string", enum: ["Low", "Medium", "High", "Critical"] },
-        verdict: {
-          type: "string",
-          enum: ["Benign", "Suspicious", "Malicious", "Needs Review"],
-        },
-        indicators: { type: "array", items: { type: "string" }, description: "Key indicators." },
-        recommended_actions: {
-          type: "array",
-          items: { type: "string" },
-          description: "Top recommended actions.",
-        },
-      },
-      required: ["title", "summary", "severity", "verdict"],
-    },
-  },
-] as const;
